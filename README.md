@@ -3,4 +3,4 @@ Izdelane resitve nalog za omenjen predmet, ki se je izvajal v prvem letniku magi
 
 ## Licenca
 
-MIT, glej [License](License.md)
+MIT, glej [License](LICENSE)
