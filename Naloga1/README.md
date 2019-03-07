@@ -1,3 +1,5 @@
+# Navodila
+
 Pri tej nalogi se bomo spoznali orodjem za distributirano shrambo podatkov Hadoop ter s programskim modelom MapReduce, ki je namenjen obdelavi velikih podatkovnih zbirk paralelno in distributirano na gruči strežnikov.
 
 Najprej moramo vzpostaviti skupino strežnikov, ki bodo imeli nameščeni sistem Apache Hadoop ter bodo tvorili gručo z enim glavnim (master) strežnikom ter tremi podpornimi (slave) strežniki. V ta namen bomo uporabili programsko orodje Docker za pripravo virtualizacije omenjene gruče strežnikov. 
@@ -12,6 +14,8 @@ Kot osnovno sliko, ki jo bomo uporabili pri virtualizaciji, bomo imeli osnovano 
 
 ##### 1. Build docker
 Za izvedbo ukaza morate biti v direktoriju "..\hadoop-cluster-docker\"
+> Zaradi tezav z instaliranjem OpenJDK9 (apt ne najde), sem posodobil na JDK11
+
 ```cmd
 docker build -t gemma/hadoop:1.0 .
 ```
