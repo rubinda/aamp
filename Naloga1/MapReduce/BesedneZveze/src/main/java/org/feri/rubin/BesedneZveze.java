@@ -25,7 +25,6 @@ public class BesedneZveze {
      *
      * Razdeli podano poved na skupine besednih zvez (v kolikor stevilo besed ni delijivo s
      * podanim parametrom vzame krajso besedno zvezo).
-     * TODO: popravi da se ignorira v kolikor je prekratka besedna zveza.
      */
     public static class RazdeliBesedneZveze
             extends Mapper<Object, Text, Text, IntWritable> {
@@ -43,8 +42,11 @@ public class BesedneZveze {
             String[] sentenceWords = value.toString().split("\\s+");
 
             for (int i=0; i<sentenceWords.length; i++) {
-                int wordLimit = i+steviloBesed > sentenceWords.length ?
-                        sentenceWords.length : i+steviloBesed;
+
+                int wordLimit = i + steviloBesed;
+                // V kolikor s besedno zvezo presezemo dolzino povedi, jo preskoci
+                if (wordLimit > sentenceWords.length) break;
+
                 String besednaZveza = String.join(" ",
                         Arrays.copyOfRange(sentenceWords, i, wordLimit));
                 context.write(new Text(besednaZveza), one);

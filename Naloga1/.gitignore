@@ -15,3 +15,9 @@ bundles/
 .hg/
 .git/
 vendor/pkg/
+
+# IntelliJ mape ko se naj ignorirajo (med drugim JAR buildi)
+classes/
+.idea/
+target/
+out/
