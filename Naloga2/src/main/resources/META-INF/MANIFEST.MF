@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Main-Class: si.rubin.App
+Class-Path: externalsortinginjava-0.2.5.jar
+
