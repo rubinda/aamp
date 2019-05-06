@@ -4,6 +4,7 @@ import com.google.code.externalsorting.ExternalSort;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.util.Comparator;
 import java.util.List;
@@ -59,7 +60,7 @@ public class DataSort {
             List<String> lines = Files.readAllLines(sortedInput.toPath());
             int linesSorted = lines.size();
             // linesSorted vrstic po 14B + zacetek, kjer je podana dolzina datoteke
-            ByteBuffer bb = ByteBuffer.allocate(linesSorted * 14 + 8);
+            ByteBuffer bb = ByteBuffer.allocate(linesSorted * 14 + 4);
             bb.putInt(linesSorted);
             for (String line : lines) {
                 // Read a sorted line and convert it into custom bytes
@@ -92,7 +93,33 @@ public class DataSort {
             reader.close();*/
             sortTime = (float) (System.currentTimeMillis() - startTime) / 1000;
             System.out.println(String.format("took %.2fs", sortTime));
+            binToTxt(outputFile, new File("Korte_Vege_10k_binToTxt.txt"), linesSorted);
+
         } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void binToTxt(File binaryFile, File txtFile, int lines) {
+        try {
+            BufferedWriter bw = new BufferedWriter(new FileWriter(txtFile));
+
+            ByteBuffer bb = ByteBuffer.allocate(lines * 14 + 4);
+            FileInputStream fis = new FileInputStream(binaryFile);
+            FileChannel fChan = fis.getChannel();
+            fChan.read(bb);
+            bb.position(0);
+            int nLines = bb.getInt();
+            while (bb.hasRemaining()) {
+                float x = bb.getFloat();
+                float y = bb.getFloat();
+                float z = bb.getFloat();
+                short i = bb.getShort();
+                bw.write(String.format("%.2f %.2f %.2f %d\n", x, y, z, i));
+            }
+            bw.close();
+            fChan.close();
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
