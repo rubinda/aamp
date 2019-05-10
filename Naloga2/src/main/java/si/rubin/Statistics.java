@@ -9,12 +9,11 @@ import java.util.Collections;
 /**
  * Racuna statistiko s pomocjo histograma
  *
- * TODO: popravi racunanje v kateri bin spada (@line 175)
- * TODO: namesto 1 bloka uporabljaj MAX_MEMORY
- * TODO: preveri kaj se zgodi v kolikor je candidateLines > linesInBlock
+ * TODO: namesto 1 bloka uporabljaj MAX_MEMORY / BLOCK_SIZE blokov
  * @author David Rubin
  */
 public class Statistics {
+    // The program has 129 bytes + lists worth of Bytes;
     private static String DATA_FILE;        // The file which holds our sorted data (@see si.rubin.DataSort)
     private static int DISK_READS;          // How many times we read the file
     private static double MAX_MEMORY;       // How much memory is available (heap?)
@@ -28,8 +27,9 @@ public class Statistics {
     private static int DATA_SIZE;           // Number of rows in the file
     private static char TARGET_VAR;         // The target variable (either Z or I, check README)
     private static int[] BIN_COUNTS;        // The histogram (number of values in bins)
-    private static double[] BIN_VALUES;      // Values for each bin
+    private static double[] BIN_VALUES;     // Values for each bin
     private static int VALUES_SIZE;         // How many points there are in the histogram
+    private static ArrayList<Float> TARGETS; // Target values (either i or z values)
 
     public static void main(String[] args) {
         if (args.length < 9) {
@@ -67,24 +67,45 @@ public class Statistics {
             //System.out.println("From line " + upBorder + " down every X is smaller than " + MAX_X);
             int candidateLines = upBorder - loBorder;
 
-            if (candidateLines > linesInBlock) {
-                System.out.println("More lines to filter than in a single Block, proceed with caution.");
-            }
-            // We are targeting short values
-            int readBytes = readBlock(fChan, loBorder * 14 + 4);
-            ArrayList<Float> targets = findTargets(readBytes, candidateLines);
-            buildHistogram(targets);
-            double avg = average();
-            double stdv = standardDeviation(avg);
-            double skew = skewness(avg);
-            double kurt = kurtosis(avg);
+            // The target values span across an interval bigger than a single block
+            int currentLine = loBorder;
+            while (candidateLines > linesInBlock) {
+                //System.out.println("Lines do not fit into one block");
+                int readBytes = readBlock(fChan, currentLine * 14 + 4);
+                findTargets(readBytes, linesInBlock);
 
-            System.out.println("Points: " + VALUES_SIZE);
-            System.out.println("Average: " + avg);
-            System.out.println("Standard deviation: " + stdv);
-            System.out.println("Skewness: " + skew);
-            System.out.println("Kurtosis: " + kurt);
+                // Decrease the number of candidate lines
+                candidateLines -= linesInBlock;
+                currentLine += linesInBlock;
+            }
+            // If we still have candidate lines, read those into TARGETS aswell
+            if (candidateLines > 0) {
+                //System.out.println("Lines fit into one block");
+                // Read the remaining candidateLines (should fit into one block)
+                int readBytes = readBlock(fChan, (currentLine) * 14 + 4);
+                findTargets(readBytes, candidateLines);
+            }
+
+            // Build a histogram with TARGETS and calculate the statistics
+            buildHistogram();
+            double avg, stdv, skew, kurt = .0;
+            avg = average();
+            stdv = standardDeviation(avg);
+            skew = skewness(avg);
+            kurt = kurtosis(avg);
+
+            System.out.println("File: \t\t" + DATA_FILE);
+            System.out.println("Points: \t" + VALUES_SIZE);
+            System.out.println("Bins: \t\t" + BIN_COUNTS.length);
+            System.out.println(String.format("Average: \t%.3f", avg));
+            System.out.println(String.format("Deviation: \t%.3f", stdv));
+            System.out.println(String.format("Skewness: \t%.3f", skew));
+            System.out.println(String.format("Kurtosis: \t%.3f", kurt));
             System.out.println("Disk reads: " + DISK_READS);
+
+            int bytesUsed = 133 + linesInBlock*12 + linesInBlock*2 + linesInBlock * 14 + 4 + BIN_COUNTS.length * 4 +
+                    BIN_COUNTS.length * 8 + TARGETS.size();
+            System.out.println(String.format("Memory: \t%.2f MB", bytesUsed / 1000000.d));
         } catch (FileNotFoundException e) {
             System.out.println("File not found.");
         } catch (Exception e) {
@@ -153,16 +174,15 @@ public class Statistics {
     }
 
     /**
-     * Izgradi histogram: BIN_COUNTS drzi koliko vrednosti je v posameznem kosu,
+     * Izgradi histogram iz TARGETS: BIN_COUNTS drzi koliko vrednosti je v posameznem kosu,
      * BIN_VALUES pa vrednost za posamezen kos
-     * @param values Vrednosti iz katerih gradimo histogram
      */
-    private static void buildHistogram(ArrayList<Float> values) {
+    private static void buildHistogram() {
         // Create a new histogram
-        float maxValue = Collections.max(values);
-        float minValue = Collections.min(values);
+        float maxValue = Collections.max(TARGETS);
+        float minValue = Collections.min(TARGETS);
         int nBins = (int) Math.ceil((maxValue - minValue) / BIN_SIZE); // Number of bins
-        VALUES_SIZE = values.size();
+        VALUES_SIZE = TARGETS.size();
         BIN_COUNTS = new int[nBins];
         BIN_VALUES = new double[nBins];
         // Calculate the values of bins
@@ -170,35 +190,34 @@ public class Statistics {
             BIN_VALUES[k] = minValue + k*BIN_SIZE + BIN_SIZE/2.;
         }
         // Count the values into the bins
-        for (float value : values) {
+        for (float value : TARGETS) {
             // Which bin the value belongs to
             int bin = (int) (value - minValue) / BIN_SIZE;
+            if (bin >= nBins) bin = nBins-1;
+            if (bin < 0) bin = 0;
             BIN_COUNTS[bin]++;
         }
     }
 
     /**
      * Prebere vrednosti iz ByteBuffer (do vrstice bodisi bytesRead ali pa lineLimit)
-     * in preveri katere Y vrednosti spadajo v nas interval
+     * in preveri katere Y vrednosti spadajo v nas interval in jih shrani v TARGETS
      * @param bytesRead koliko bytes je bilo prebranih v blockBuffer (globalen)
      * @param lineLimit koliko vrstic lahko pregledamo (ce jih je manj kot pa pase v blok)
-     * @return seznam ciljnih spremenljivk
      * @throws Exception ce je vmes kaksna vrstica ki ne sodi v interval za X
      */
-    private static ArrayList<Float> findTargets(int bytesRead, int lineLimit) throws Exception {
+    private static void findTargets(int bytesRead, int lineLimit) throws Exception {
         populateValues(0, bytesRead);
-        ArrayList<Float> targets = new ArrayList<>();
         for (int i = 0; i < lineLimit; i++) {
             if (ys[i] >= MIN_Y && ys[i] < MAX_Y) {
                 if (TARGET_VAR == 'i')
-                    targets.add((float) is[i]);
+                    TARGETS.add((float) is[i]);
                 else
-                    targets.add(zs[i]);
+                    TARGETS.add(zs[i]);
             }
             if (xs[i] < MIN_X || xs[i] > MAX_X)
                 throw new Exception("Some Xs are not inside the interval");
         }
-        return targets;
     }
 
     /**
@@ -346,6 +365,7 @@ public class Statistics {
         MAX_Y = Double.parseDouble(args[6]);
         BIN_SIZE = Integer.parseInt(args[7]);
         TARGET_VAR = args[8].charAt(0);
+        TARGETS = new ArrayList<>();
         checkParams();
     }
 }
