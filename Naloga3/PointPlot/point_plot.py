@@ -26,4 +26,4 @@ def plot_file(filename):
 
 
 if __name__ == '__main__':
-    plot_file('../TestniPodatki/Polinomska Funkcija/Podatki.txt')
+    plot_file('../TestniPodatki/Linearna Funkcija/Podatki.txt')

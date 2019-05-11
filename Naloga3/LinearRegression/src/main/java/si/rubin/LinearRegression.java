@@ -8,8 +8,6 @@ import java.util.regex.Pattern;
 import java.util.stream.DoubleStream;
 
 import org.apache.commons.math3.linear.MatrixUtils;
-import org.apache.commons.math3.linear.RealMatrix;
-import org.apache.commons.math3.linear.RealVector;
 
 /**
  * LinearRegression on Space separated values. The points can compose a polynomial, linear or multilinear function.
@@ -24,10 +22,10 @@ import org.apache.commons.math3.linear.RealVector;
  *
  * @author David Rubin
  * Uporabljeno pri predmetu Algoritmi in analiza masovnih podatkov, FERI 2019
+ * TODO: calculate b0 with given b1-bN
  */
 
 public class LinearRegression {
-
     private static final Pattern SPACE_PATTERN = Pattern.compile(" ");
     private static double[][] X_VALUES;     // The X values (in case of multilinear/poly more Xs are given)
     private static double[] Y_VALUES;       // The Y values
@@ -50,12 +48,13 @@ public class LinearRegression {
         }
         readFile(fileName, functionType, degree);
         centerData();
-        calculateCoefficients(X_VALUES, Y_VALUES);
-
-
-
+        double[] b = calculateCoefficients(X_VALUES, Y_VALUES);
     }
 
+    /**
+     * Prints out a 2D array
+     * @param A 2D array
+     */
     private static void printMatrix(double[][] A) {
         for (int i = 0; i < A.length; i++) {
             for (int j = 0; j < A[i].length; j++) {
@@ -71,7 +70,7 @@ public class LinearRegression {
      * @param xSize number of Xs, >1 if multilin or poly
      */
     private static void initPointLists(int fileLength, int xSize) {
-        X_VALUES = new double[xSize][fileLength];
+        X_VALUES = new double[fileLength][xSize];
         Y_VALUES = new double[fileLength];
     }
 
@@ -99,7 +98,7 @@ public class LinearRegression {
                 // The last value is Y, all before are Xs
                 Y_VALUES[lineCount] = values[values.length - 1];
                 for (int i = 0; i < values.length-1; i++) {
-                    X_VALUES[i][lineCount] = values[i];
+                    X_VALUES[lineCount][i] = values[i];
                 }
                 lineCount++;
             }
@@ -113,14 +112,19 @@ public class LinearRegression {
         }
     }
 
+    /**
+     * Calculates b via OLS
+     * b = (X' * X)^-1 * X' * y
+     * @param X input variables
+     * @param y target variable
+     * @return coefficients b
+     */
     private static double[] calculateCoefficients(double[][] X, double[] y) {
-        // b = (X_T * X)^-1 * X_T * y
-        double[] b = new double[X.length];
-
         double[][] transposeX = transpose(X);
-        double[][] midResult =  matMul(transposeX, X);
-        RealMatrix rm = MatrixUtils.inverse(MatrixUtils.createRealMatrix(midResult));
-        return b;
+        double[][] xTx =  matMul(transposeX, X);
+        double[][] inverted = MatrixUtils.inverse(MatrixUtils.createRealMatrix(xTx)).getData();
+        double[][] res = matMul(inverted, transposeX);
+        return matMul(res, y);
     }
 
     /**
@@ -157,11 +161,20 @@ public class LinearRegression {
         }
 
         // Center the X_VALUES for each column
-        for (double[] xs : X_VALUES) {
-            double xSum = DoubleStream.of(xs).sum();
-            double xAvg = xSum / xs.length;
-            for (int i = 0; i < xs.length; i++) {
-                xs[i] -= xAvg;
+        // Calculate the average of each column
+        double[] colAvg = new double[X_VALUES[0].length];
+        for (int i = 0; i < X_VALUES.length; i++) {
+            for (int j = 0; j < X_VALUES[0].length; j++) {
+                colAvg[j] += X_VALUES[i][j];
+            }
+        }
+        for (int i = 0; i < colAvg.length; i++) {
+            colAvg[i] = colAvg[i] / X_VALUES.length;
+        }
+        // Deduct the average from each value
+        for (int i = 0; i < X_VALUES.length; i++) {
+            for (int j = 0; j < X_VALUES[0].length; j++) {
+                X_VALUES[i][j] -= colAvg[j];
             }
         }
     }
@@ -189,6 +202,27 @@ public class LinearRegression {
         return result;
     }
 
+    /**
+     * Multiplies the matrix A with vector b
+     * @param A matrix with size m x n
+     * @param b vector with size n x 1
+     * @return product Ab with size m x 1
+     */
+    private static double[] matMul(double[][] A, double[] b) {
+        double[] result = new double[A.length];
+        for (int i = 0; i < A.length; i++) {
+            for (int j = 0; j < A[0].length; j++) {
+                result[i] += A[i][j] * b[j];
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Transposes the given matrix
+     * @param A 2D matrix
+     * @return A'
+     */
     private static double[][] transpose(double [][] A) {
         int newRows = A[0].length;
         int newCols = A.length;
@@ -200,92 +234,4 @@ public class LinearRegression {
         }
         return result;
     }
-
-
-    // The following method is taken from
-    // https://www.sanfoundry.com/java-program-find-inverse-matrix/
-    public static double[][] invert(double a[][]) {
-        int n = a.length;
-        double x[][] = new double[n][n];
-        double b[][] = new double[n][n];
-        int index[] = new int[n];
-        for (int i=0; i<n; ++i)
-            b[i][i] = 1;
-
-        // Transform the matrix into an upper triangle
-        gaussian(a, index);
-
-        // Update the matrix b[i][j] with the ratios stored
-        for (int i=0; i<n-1; ++i)
-            for (int j=i+1; j<n; ++j)
-                for (int k=0; k<n; ++k)
-                    b[index[j]][k]
-                            -= a[index[j]][i]*b[index[i]][k];
-
-        // Perform backward substitutions
-        for (int i=0; i<n; ++i) {
-            x[n-1][i] = b[index[n-1]][i]/a[index[n-1]][n-1];
-            for (int j=n-2; j>=0; --j) {
-                x[j][i] = b[index[j]][i];
-                for (int k=j+1; k<n; ++k) {
-                    x[j][i] -= a[index[j]][k]*x[k][i];
-                }
-                x[j][i] /= a[index[j]][j];
-            }
-        }
-        return x;
-    }
-
-    // The following method is taken from
-    // https://www.sanfoundry.com/java-program-find-inverse-matrix/
-    // Method to carry out the partial-pivoting Gaussian
-    // elimination.  Here index[] stores pivoting order.
-    public static void gaussian(double a[][], int index[]) {
-        int n = index.length;
-        double c[] = new double[n];
-
-        // Initialize the index
-        for (int i=0; i<n; ++i)
-            index[i] = i;
-
-        // Find the rescaling factors, one from each row
-        for (int i=0; i<n; ++i) {
-            double c1 = 0;
-            for (int j=0; j<n; ++j) {
-                double c0 = Math.abs(a[i][j]);
-                if (c0 > c1) c1 = c0;
-            }
-            c[i] = c1;
-        }
-
-        // Search the pivoting element from each column
-        int k = 0;
-        for (int j=0; j<n-1; ++j) {
-            double pi1 = 0;
-            for (int i=j; i<n; ++i) {
-                double pi0 = Math.abs(a[index[i]][j]);
-                pi0 /= c[index[i]];
-                if (pi0 > pi1) {
-                    pi1 = pi0;
-                    k = i;
-                }
-            }
-
-            // Interchange rows according to the pivoting order
-            int itmp = index[j];
-            index[j] = index[k];
-            index[k] = itmp;
-            for (int i=j+1; i<n; ++i) {
-                double pj = a[index[i]][j]/a[index[j]][j];
-
-                // Record pivoting ratios below the diagonal
-                a[index[i]][j] = pj;
-
-                // Modify other elements accordingly
-                for (int l=j+1; l<n; ++l)
-                    a[index[i]][l] -= pj*a[index[j]][l];
-            }
-        }
-    }
-
 }
