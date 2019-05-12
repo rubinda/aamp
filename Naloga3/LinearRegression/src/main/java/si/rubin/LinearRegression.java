@@ -22,7 +22,6 @@ import org.apache.commons.math3.linear.MatrixUtils;
  *
  * @author David Rubin
  * Uporabljeno pri predmetu Algoritmi in analiza masovnih podatkov, FERI 2019
- * TODO: calculate b0 with given b1-bN
  */
 
 public class LinearRegression {
@@ -46,9 +45,23 @@ public class LinearRegression {
             }
             degree = Integer.parseInt(args[2]);
         }
+
+        // Read the data into X_VALUES and Y_VALUES
         readFile(fileName, functionType, degree);
+        // Center the data (deduct the average)
         centerData();
-        double[] b = calculateCoefficients(X_VALUES, Y_VALUES);
+        // Calculate the coefficients b1 - bN
+        double[] b1N = calculateCoefficients(X_VALUES, Y_VALUES);
+        // Reload the original data
+        readFile(fileName, functionType, degree);
+        // Calculate the coefficient b0 with the original data
+        double[] b = calculateCoefficientB0(X_VALUES, Y_VALUES, b1N);
+
+        // Print out the resulting coefficients
+        System.out.println("Coefficients:");
+        for (int i = 0; i < b.length; i++) {
+            System.out.println(String.format(" b%d: %.3f", i, b[i]));
+        }
     }
 
     /**
@@ -56,9 +69,9 @@ public class LinearRegression {
      * @param A 2D array
      */
     private static void printMatrix(double[][] A) {
-        for (int i = 0; i < A.length; i++) {
-            for (int j = 0; j < A[i].length; j++) {
-                System.out.print(A[i][j] + " ");
+        for (double[] doubles : A) {
+            for (double aDouble : doubles) {
+                System.out.print(aDouble + " ");
             }
             System.out.println();
         }
@@ -81,7 +94,7 @@ public class LinearRegression {
      * @param degree polynomial degree if functionType == "po"
      */
     private static void readFile(String fileName, String functionType, int degree) {
-        List<String> lines = null;
+        List<String> lines;
         try {
             // Reads all of the data
             lines = Files.readAllLines(new File(fileName).toPath());
@@ -97,16 +110,13 @@ public class LinearRegression {
                 double[] values = SPACE_PATTERN.splitAsStream(line).mapToDouble(Double::parseDouble).toArray();
                 // The last value is Y, all before are Xs
                 Y_VALUES[lineCount] = values[values.length - 1];
-                for (int i = 0; i < values.length-1; i++) {
-                    X_VALUES[lineCount][i] = values[i];
-                }
+                System.arraycopy(values, 0, X_VALUES[lineCount], 0, values.length-1);
                 lineCount++;
             }
             // String lines are no longer needed
             lines.clear();
             // Preprocess the lines if we have a polynomial function
             if (functionType.equals("po")) polynomialPreprocess(degree);
-            //centerData();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -128,22 +138,47 @@ public class LinearRegression {
     }
 
     /**
+     * Adds the b0 coefficient to the array of coefficients
+     * @param X input variables
+     * @param y target variable
+     * @param b coefficients b1 - bN
+     * @return coefficients b0 - bN
+     */
+    private static double[] calculateCoefficientB0(double[][] X, double[] y, double[] b) {
+        double[] b0s = new double[X.length];
+        for (int i = 0; i < X.length; i++) {
+            double sumBX = 0.0;
+            for (int j = 0; j < X[0].length; j++) {
+                sumBX += b[j] * X[i][j];
+            }
+            b0s[i] = y[i] - sumBX;
+        }
+        // Get the average of b0
+        double avgB0 = DoubleStream.of(b0s).sum();
+        avgB0 /= b0s.length;
+        double[] bs = new double[b.length + 1];
+        bs[0] = avgB0;
+        System.arraycopy(b, 0, bs, 1, b.length);
+        return bs;
+    }
+
+    /**
      * PolynomialPreprocess edits the data, so that we have Xj = X1^j,
      * where j > 1
      * @param guessedDegree the (approx.) degree of the polynomial
      */
     private static void polynomialPreprocess(int guessedDegree) {
         // Number of points inside the datafile
-        int dataSize = Y_VALUES.length;
+        int dataSize = X_VALUES.length;
 
         // Populate the new lists with data based on X1
         for (int j = 0; j < dataSize; j++) {
-            double x1 = X_VALUES[0][j];
+            double x1 = X_VALUES[j][0];
             // Calculate every Xj, where j > 1
             // List indices start with 0, so Xi = X1^(i+1)
             int i=1;
             while (i<guessedDegree) {
-                X_VALUES[i][j] = Math.pow(x1, i+1);
+                X_VALUES[j][i] = Math.pow(x1, i+1);
                 i++;
             }
         }
@@ -163,9 +198,9 @@ public class LinearRegression {
         // Center the X_VALUES for each column
         // Calculate the average of each column
         double[] colAvg = new double[X_VALUES[0].length];
-        for (int i = 0; i < X_VALUES.length; i++) {
+        for (double[] xValue : X_VALUES) {
             for (int j = 0; j < X_VALUES[0].length; j++) {
-                colAvg[j] += X_VALUES[i][j];
+                colAvg[j] += xValue[j];
             }
         }
         for (int i = 0; i < colAvg.length; i++) {
